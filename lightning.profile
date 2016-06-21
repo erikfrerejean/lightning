@@ -6,9 +6,53 @@
  * form.
  */
 
+use Drupal\Component\Serialization\Yaml;
+use Drupal\Component\Utility\UrlHelper;
 use Drupal\Core\Config\FileStorage;
 use Drupal\Core\Config\InstallStorage;
 use Drupal\Core\Form\FormStateInterface;
+
+/**
+ * Implements hook_install_tasks_alter().
+ */
+function lightning_install_tasks_alter(array &$tasks, array $install_state) {
+  $tasks['install_finished']['function'] = 'lightning_post_install_redirect';
+}
+
+/**
+ * Redirects the user to a particular URL after installation.
+ *
+ * @param array $install_state
+ *   The current install state.
+ */
+function lightning_post_install_redirect(array $install_state) {
+  $post_install = lightning_post_install_info();
+
+  if (!empty($post_install['redirect'])) {
+    $redirect = $post_install['redirect']['path'];
+
+    if (!empty($post_install['redirect']['query'])) {
+      $redirect .= '?' . UrlHelper::buildQuery($post_install['redirect']['query']);
+    }
+    install_goto($redirect);
+  }
+}
+
+/**
+ * Returns site-specific post-install configuration.
+ *
+ * @return array
+ */
+function lightning_post_install_info() {
+  $path = \Drupal::service('site.path') . '/lightning.extend.yml';
+  if (file_exists($path)) {
+    $extend = file_get_contents($path);
+    return Yaml::decode($extend);
+  }
+  else {
+    return [];
+  }
+}
 
 /**
  * Rebuilds the service container.
@@ -77,6 +121,11 @@ function lightning_extensions_enable($form_id, FormStateInterface $form_state) {
       ]);
     }
     \Drupal::service('module_installer')->install($features);
+  }
+
+  $post_install = lightning_post_install_info();
+  if (!empty($post_install['modules'])) {
+    \Drupal::service('module_installer')->install($post_install['modules']);
   }
 }
 
